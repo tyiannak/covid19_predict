@@ -65,6 +65,45 @@ def load_data():
               "The two csvs contain different number of rows or columns! ")
 
 
+def train_model(countries, cases, deaths, pop, selected_countries_to_train):
+
+    features, target_cases, target_deaths = [], [], []
+    for iS, s in enumerate(selected_countries_to_train):
+        # get data ...
+        cas = cases[countries.index(s)]
+        dea = deaths[countries.index(s)]
+        # and normalized data for current country
+        cas_norm = [10**6 * c / pop[countries.index(s)] for c in cas]
+        dea_norm = [10**6 * d / pop[countries.index(s)] for d in dea]
+
+        # get features
+        start_window = 10
+        for i in range(start_window, len(cas)-1):
+            feature_vector = [
+                cas_norm[i] - cas_norm[i - 1],
+                cas_norm[i] - cas_norm[i - 2],
+                cas_norm[i] - cas_norm[i - 3],
+                cas_norm[i] - cas_norm[i - 4],
+                dea_norm[i] - dea_norm[i - 1],
+                dea_norm[i] - dea_norm[i - 2],
+                dea_norm[i] - dea_norm[i - 3],
+                dea_norm[i] - dea_norm[i - 4],
+                # TODO add life exp here and other demographics
+            ]
+            features.append(feature_vector)
+            target_cases.append(cas_norm[i + 1] - cas_norm[i])
+            target_deaths.append(dea_norm[i + 1] - dea_norm[i])
+            print(feature_vector, target_cases[-1], target_deaths[-1])
+
+    features = np.array(features)
+    target_cases = np.array(target_cases)
+    target_deaths = np.array(target_deaths)
+    print(features.shape)
+    from sklearn import svm
+    clf = svm.SVR(C=1, kernel="linear")
+    clf.fit(features, target_cases)
+
+
 def plot_countries(dates, countries, cases, deaths, selected_countries, pop):
     subplot_titles = []
     for c in selected_countries:
@@ -106,10 +145,26 @@ if __name__ == "__main__":
 
     # read the data:
     dates, countries, populations, cases, deaths = load_data()
+
+    # hard-coded correction of some of the recent data (e.g. greece seems to be outdated)
+    deaths[countries.index("greece")][-1] = 3
+    deaths[countries.index("greece")][-2] = 3
+    cases[countries.index("greece")][-1] = 220
+    cases[countries.index("greece")][-2] = 150
     # get only countries that exist in the data
     sel_countries_final = [s for s in sel_countries if s in countries]
 
     # plot selected data:
     plot_countries(dates, countries, cases, deaths, sel_countries_final, populations)
 
+    selected_countries_to_train = ["china", "italy", "germany", "spain",
+                                   "united states", "iran", "egypt",
+                                   "south korea", "japan", "singapore",
+                                   "canada", "brazil", "chile", "france",
+                                   "switzerland", "denmark", "netherlands",
+                                   "sweden", "united kingdom", "norway",
+                                   "belgium", "finland"]
+    train_model(countries, cases, deaths, populations, selected_countries_to_train)
+
+    selected_countries_to_test = ["austria", "greece"]
 

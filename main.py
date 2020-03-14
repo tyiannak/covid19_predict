@@ -1,19 +1,14 @@
 import csv
-import sys
-import time
 import numpy as np
-import scipy
 import argparse
-import os
-
+import plotly
+import plotly.graph_objs as go
 
 def load_data():
-    cases = []
-    deaths = []
     dates_c = []
     dates_d = []
-    with open("total_cases.csv", 'r') as file:
-        reader = csv.reader(file)
+    with open("total_cases.csv", 'r') as fp:
+        reader = csv.reader(fp)
         count = 0
         for row in reader:
             if count == 0:
@@ -28,8 +23,8 @@ def load_data():
                         cases[ir].append(0)
             count += 1
 
-    with open("total_deaths.csv", 'r') as file:
-        reader = csv.reader(file)
+    with open("total_deaths.csv", 'r') as fp:
+        reader = csv.reader(fp)
         count = 0
         for row in reader:
             if count == 0:
@@ -45,21 +40,61 @@ def load_data():
             count += 1
 
     if dates_c == dates_d and countries_c == countries_d:
-        return dates_c, countries_d, cases, deaths
-
+        count = 0
+        countries_with_pop = []
+        populations = []
+        with open("populations.csv", 'r') as fp:
+            reader = csv.reader(fp)
+            for row in reader:
+                if count > 0:
+                    if row[0].lower() in countries_c:
+                        countries_with_pop.append(row[0].lower())
+                        if row[1]:
+                            populations.append(float(row[1]))
+                        else:
+                            populations.append(10**6)  # if no population found
+                count += 1
+        cases_final, deaths_final = [], []
+        for c in countries_with_pop:
+            cases_final.append(cases[countries_d.index(c)])
+            deaths_final.append(deaths[countries_d.index(c)])
+        return dates_c, countries_with_pop, populations, cases_final, \
+               deaths_final
     else:
         print("ERROR in data consistency! "
               "The two csvs contain different number of rows or columns! ")
 
-def load_data2():
-    with open('total_cases.csv') as csvfile:
-        reader = csv.DictReader(csvfile)
-        kept2 = [row for row in reader]
-    print(kept2)
+
+def plot_countries(dates, countries, cases, deaths, selected_countries, pop):
+    subplot_titles = []
+    for c in selected_countries:
+        subplot_titles.append(c + " - cases")
+        subplot_titles.append(c + " - deaths")
+        subplot_titles.append(c + " - NORM cases (per mil)")
+        subplot_titles.append(c + " - NORM deaths (per mil)")
+
+    figs = plotly.subplots.make_subplots(rows=len(selected_countries), cols=4,
+                                         subplot_titles=subplot_titles)
+    for iS, s in enumerate(selected_countries):
+        cas = cases[countries.index(s)]
+        dea = deaths[countries.index(s)]
+        cas_norm = [10**6 * c / pop[countries.index(s)] for c in cas]
+        dea_norm = [10**6 * d / pop[countries.index(s)] for d in dea]
+        figs.append_trace(go.Scatter(x=dates, y=cas, showlegend=False),
+                          iS + 1, 1)
+        figs.append_trace(go.Scatter(x=dates, y=dea, showlegend=False),
+                          iS + 1, 2)
+        figs.append_trace(go.Scatter(x=dates, y=cas_norm, showlegend=False),
+                          iS + 1, 3)
+        figs.append_trace(go.Scatter(x=dates, y=dea_norm, showlegend=False),
+                          iS + 1, 4)
+
+    plotly.offline.plot(figs, filename="temp.html", auto_open=True)
+
 
 def parse_arguments():
     covid = argparse.ArgumentParser(description="")
-    covid.add_argument("-c", "--countries")
+    covid.add_argument("-c", "--countries", nargs="+")
     covid.add_argument("--chromagram", action="store_true",
                                   help="Show chromagram")
     return covid.parse_args()
@@ -67,6 +102,14 @@ def parse_arguments():
 
 if __name__ == "__main__":
     args = parse_arguments()
-    dates, countries, cases, deaths = load_data()
-    print(cases[countries.index("italy")])
+    sel_countries = args.countries
+
+    # read the data:
+    dates, countries, populations, cases, deaths = load_data()
+    # get only countries that exist in the data
+    sel_countries_final = [s for s in sel_countries if s in countries]
+
+    # plot selected data:
+    plot_countries(dates, countries, cases, deaths, sel_countries_final, populations)
+
 

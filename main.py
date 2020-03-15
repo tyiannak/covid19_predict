@@ -4,6 +4,7 @@ import argparse
 import plotly
 import plotly.graph_objs as go
 from sklearn import svm
+from sklearn.neighbors import KNeighborsRegressor
 
 
 def load_data():
@@ -60,17 +61,18 @@ def load_data():
         for c in countries_with_pop:
             cases_final.append(cases[countries_d.index(c)])
             deaths_final.append(deaths[countries_d.index(c)])
-        return dates_c, countries_with_pop, populations, cases_final, \
-               deaths_final
+
+        return dates_c, countries_with_pop, populations, \
+               cases_final, deaths_final
     else:
         print("ERROR in data consistency! "
               "The two csvs contain different number of rows or columns! ")
 
 
-def feature_extraction(countries, cases, deaths, pop, selected_countries_to_train):
+def feature_extraction(countries, cases, deaths, pop, sel_countries_train):
     features, target_cases, target_deaths = [], [], []
-    for iS, s in enumerate(selected_countries_to_train):
-        print(s)
+    for iS, s in enumerate(sel_countries_train):
+#        print(s)
         # get data ...
         cas = cases[countries.index(s)]
         dea = deaths[countries.index(s)]
@@ -79,23 +81,21 @@ def feature_extraction(countries, cases, deaths, pop, selected_countries_to_trai
         dea_norm = [10**6 * d / pop[countries.index(s)] for d in dea]
 
         # get features
-        start_window = 10
+        start_window = 6
         for i in range(start_window, len(cas)-1):
             feature_vector = [
                 cas_norm[i] - cas_norm[i - 1],
                 cas_norm[i] - cas_norm[i - 2],
-                cas_norm[i] - cas_norm[i - 3],
-                cas_norm[i] - cas_norm[i - 4],
+                cas_norm[i] - 2 * cas_norm[i - 1] + cas_norm[i - 2],
                 dea_norm[i] - dea_norm[i - 1],
                 dea_norm[i] - dea_norm[i - 2],
-                dea_norm[i] - dea_norm[i - 3],
-                dea_norm[i] - dea_norm[i - 4],
+                dea_norm[i] - 2 * dea_norm[i - 1] + dea_norm[i - 2],
                 # TODO add life exp here and other demographics
             ]
             features.append(feature_vector)
             target_cases.append(cas_norm[i + 1] - cas_norm[i])
             target_deaths.append(dea_norm[i + 1] - dea_norm[i])
-            print(feature_vector, target_cases[-1], target_deaths[-1])
+#            print(feature_vector, target_cases[-1], target_deaths[-1])
     features = np.array(features)
     target_cases = np.array(target_cases)
     target_deaths = np.array(target_deaths)
@@ -108,12 +108,22 @@ def train_model(countries, cases, deaths, pop, train_countries):
                                                           cases,
                                                           deaths, pop,
                                                           train_countries)
-    clf_c = svm.SVR(C=5, kernel="linear")
+
+    print(tr_features.shape)
+#    to_keep = (tr_features.any(axis=1))
+#    tr_features = tr_features[to_keep]
+#    tr_cases = tr_cases[to_keep]
+#    tr_deaths = tr_deaths[to_keep]
+#    print(tr_features.shape)
+    clf_c = svm.SVR(C=1, kernel="linear")
+#    clf_c = KNeighborsRegressor(n_neighbors=19)
     clf_c.fit(tr_features, tr_cases)
-    clf_d = svm.SVR(C=5, kernel="linear")
+    clf_d = svm.SVR(C=1, kernel="linear")
+#    clf_d = KNeighborsRegressor(n_neighbors=19)
     clf_d.fit(tr_features, tr_deaths)
 
     return clf_c, clf_d
+
 
 def test_model(model, countries, cases, deaths, pop, test_countries):
     te_features, te_cases, te_deaths = feature_extraction(countries,
@@ -122,9 +132,7 @@ def test_model(model, countries, cases, deaths, pop, test_countries):
                                                           test_countries)
     cases_pred = model.predict(te_features)
     error = np.mean(np.abs(cases_pred - te_cases))
-    print(" - - ERROR - - ")
-    print(error)
-    print(" - - ERROR - - ")
+    print("Error: {0:.3f}".format(error))
     return cases_pred, te_cases
 
 
@@ -140,6 +148,7 @@ def plot_countries(dates, countries, cases, deaths, selected_countries, pop):
                                          subplot_titles=subplot_titles)
 
     # train the model with ALL countries
+    print("Training global model : ")
     svm_global_c, svm_global_d = train_model(countries, cases, deaths,
                                              pop, countries)
 
@@ -162,12 +171,10 @@ def plot_countries(dates, countries, cases, deaths, selected_countries, pop):
         feature_vector = [
             cas_norm[-1] - cas_norm[-2],
             cas_norm[-1] - cas_norm[-3],
-            cas_norm[-1] - cas_norm[-4],
-            cas_norm[-1] - cas_norm[-5],
+            cas_norm[-1] - 2 * cas_norm[-2] + cas_norm[-3],
             dea_norm[-1] - dea_norm[-2],
             dea_norm[-1] - dea_norm[-3],
-            dea_norm[-1] - dea_norm[-4],
-            dea_norm[-1] - dea_norm[-5],
+            dea_norm[-1] - 2 * dea_norm[-2] + dea_norm[-3],
             # TODO add life exp here and other demographics
         ]
         pred_c = svm_global_c.predict([feature_vector])[0] * \
@@ -183,12 +190,10 @@ def plot_countries(dates, countries, cases, deaths, selected_countries, pop):
         feature_vector = [
             new_c - cas_norm[-1],
             new_c - cas_norm[-2],
-            new_c - cas_norm[-3],
-            new_c - cas_norm[-4],
+            new_c - 2 * cas_norm[-1] + cas_norm[-2],
             new_d - dea_norm[-1],
             new_d - dea_norm[-2],
-            new_d - dea_norm[-3],
-            new_d - dea_norm[-4],
+            new_d - 2 * dea_norm[-1] + dea_norm[-2],
             # TODO add life exp here and other demographics
         ]
         pred_c = svm_global_c.predict([feature_vector])[0] * \
@@ -202,6 +207,54 @@ def plot_countries(dates, countries, cases, deaths, selected_countries, pop):
     plotly.offline.plot(figs, filename="temp.html", auto_open=True)
 
 
+def validate(countries, cases, deaths, populations):
+    # Training model for cross validation
+    sel_countries_1 = [d for d in countries[1::2]]
+    sel_countries_2 = [d for d in countries[0::2]]
+
+    svm_cases_1, svm_deaths_1 = train_model(countries, cases, deaths, populations,
+                                            sel_countries_1)
+    svm_cases_2, svm_deaths_2 = train_model(countries, cases, deaths, populations,
+                                            sel_countries_2)
+
+    n_cols = 5
+    figs = plotly.subplots.make_subplots(rows=
+                                         int((len(countries) / n_cols)) + 1,
+                                         cols=n_cols,
+                                         subplot_titles=
+                                         ["new cases per million in " + s
+                                          for s in sel_countries_1 +
+                                          sel_countries_2])
+    for iS, s in enumerate(sel_countries_1):
+        cases_pred_1, cases_true_1 = test_model(svm_cases_1, countries, cases,
+                                                deaths, populations, [s])
+        mark_prop1 = dict(color='rgba(80, 50, 250, 0.9)',
+                          line=dict(color='rgba(150, 180, 80, 1)', width=3))
+        mark_prop2 = dict(color='rgba(250, 150, 80, 0.9)',
+                          line=dict(color='rgba(150, 180, 80, 1)', width=3))
+        figs.append_trace(go.Scatter(x=dates, y=cases_pred_1, name="pred",
+                                     marker=mark_prop1),
+                          int(iS / n_cols) + 1, iS % n_cols + 1)
+        figs.append_trace(go.Scatter(x=dates, y=cases_true_1, name="true",
+                                     marker=mark_prop2),
+                          int(iS / n_cols) + 1, iS % n_cols + 1 )
+    for iS, s in enumerate(sel_countries_2):
+        cases_pred_2, cases_true_2 = test_model(svm_cases_2, countries, cases,
+                                                deaths, populations, [s])
+        mark_prop1 = dict(color='rgba(80, 50, 250, 0.9)',
+                          line=dict(color='rgba(150, 180, 80, 1)', width=3))
+        mark_prop2 = dict(color='rgba(250, 150, 80, 0.9)',
+                          line=dict(color='rgba(150, 180, 80, 1)', width=3))
+        figs.append_trace(go.Scatter(x=dates, y=cases_pred_2, name="pred",
+                                     marker=mark_prop1),
+                          int((iS+len(sel_countries_1)) / n_cols) + 1, (iS+len(sel_countries_1)) % n_cols + 1)
+        figs.append_trace(go.Scatter(x=dates, y=cases_true_2, name="true",
+                                     marker=mark_prop2),
+                          int((iS+len(sel_countries_1)) / n_cols) + 1, (iS+len(sel_countries_1)) % n_cols + 1 )
+
+    plotly.offline.plot(figs, filename="temp2.html", auto_open=True)
+
+
 def parse_arguments():
     covid = argparse.ArgumentParser(description="")
     covid.add_argument("-c", "--countries", nargs="+")
@@ -213,39 +266,39 @@ def parse_arguments():
 if __name__ == "__main__":
     args = parse_arguments()
     sel_countries = args.countries
+    important_countries = ["united states", "china", "germany", "italy", "greece",
+                           "spain", "france", "united kingdom", "japan",
+                           "south korea", "taiwan", "austria", "netherlands",
+                           "canada", "denmark", "ireland"]
 
     # read the data:
-    dates, countries, populations, cases, deaths = load_data()
+    dates, countries_init, populations_init, cases_init, deaths_init = load_data()
 
     # hard-coded correction of some of the recent data (e.g. greece seems to be outdated)
-    deaths[countries.index("greece")][-1] = 3
-    deaths[countries.index("greece")][-2] = 3
-    cases[countries.index("greece")][-1] = 228
-    cases[countries.index("greece")][-2] = 150
+    deaths_init[countries_init.index("greece")][-1] = 3
+    deaths_init[countries_init.index("greece")][-2] = 3
+    cases_init[countries_init.index("greece")][-1] = 228
+    cases_init[countries_init.index("greece")][-2] = 150
+
+    cases = [c for ic, c in enumerate(cases_init)
+             if countries_init[ic] in important_countries]
+    deaths = [c for ic, c in enumerate(deaths_init)
+              if countries_init[ic] in important_countries]
+    populations = [c for ic, c in enumerate(populations_init)
+                   if countries_init[ic] in important_countries]
+    countries = [c for ic, c in enumerate(countries_init)
+                   if countries_init[ic] in important_countries]
+
+    print(len(cases), len(important_countries), len(deaths))
+
+
     # get only countries that exist in the data
     sel_countries_final = [s for s in sel_countries if s in countries]
 
     # plot selected data:
-    plot_countries(dates, countries, cases, deaths, sel_countries_final, populations)
-"""
-    selected_countries_to_train = ["china", "italy",
-                                   "united states", "iran", "egypt",
-                                   "south korea", "japan", "singapore",
-                                   "canada", "brazil", "chile", "france",
-                                   "switzerland", "denmark", "netherlands",
-                                   "sweden",
-                                   "belgium", "finland"]
-    svm_model = train_model(countries, cases, deaths, populations,
-                            selected_countries_to_train)
+    plot_countries(dates, countries, cases, deaths, sel_countries_final,
+                   populations)
 
-    selected_countries_to_test = ["austria", "greece", "germany", "spain", "united kingdom", "norway"]
-    test_model(svm_model, countries, cases, deaths, populations, selected_countries_to_test)
 
-    selected_countries_to_test = ["italy"]
-    cases_pred, cases_true = test_model(svm_model, countries, cases, deaths, populations, selected_countries_to_test)
-    figs = plotly.subplots.make_subplots(rows=1, cols=1, subplot_titles="")
-    figs.append_trace(go.Scatter(x=dates, y=cases_pred, name="pred"), 1, 1)
-    figs.append_trace(go.Scatter(x=dates, y=cases_true, name="true"), 1, 1)
-    plotly.offline.plot(figs, filename="temp2.html", auto_open=True)
-
-"""
+    # validate
+    validate(countries, cases, deaths, populations)

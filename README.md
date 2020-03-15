@@ -2,7 +2,11 @@
 A simple Python predictor for covid19 data
 
 ## Methodology
-TODO
+ * Total number of cases (per day) are first normalized by country population.
+ * Training data is created by extracting the following features for each data point (day) of the dataset: 1st derivative, 2nd derivative and deltas from days -2 and -3. Same for number of deaths. As a "ground truth" (target) value we use the true relative case increase (new cases) in the next day.
+ * An SVM linear regressor is trained using the data of the previous tep.
+ * SVM is used to predict (normalized) new cases for tomorrow and the next day (denormalization also needs to applied so that the final outcome is in number of new cases)
+ * Predictions are shown in the terminal. The two plots show (a) total cases and deaths (and normalized) (b) new cases and predicted values (simulated results using cross validation)
 
 ## Install dependencies
 `pip3 install -r requirements.txt`

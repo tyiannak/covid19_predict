@@ -274,12 +274,6 @@ if __name__ == "__main__":
     # read the data:
     dates, countries_init, populations_init, cases_init, deaths_init = load_data()
 
-    # hard-coded correction of some of the recent data (e.g. greece seems to be outdated)
-    deaths_init[countries_init.index("greece")][-1] = 3
-    deaths_init[countries_init.index("greece")][-2] = 3
-    cases_init[countries_init.index("greece")][-1] = 228
-    cases_init[countries_init.index("greece")][-2] = 150
-
     cases = [c for ic, c in enumerate(cases_init)
              if countries_init[ic] in important_countries]
     deaths = [c for ic, c in enumerate(deaths_init)

@@ -1,5 +1,6 @@
 # covid19_predict
-A simple Python predictor for covid19 data
+A simple Python predictor for covid19 data. 
+Note: this code uses simple ML and feature extraction techniques and it does not take into consideration any other parameters (weather-related, socio-economic etc). It's role is for 100% educational purposes for demonstrating how ML can be used to predict time sequence values.
 
 ## Methodology
  * Total number of cases (per day) are first normalized by country population.
